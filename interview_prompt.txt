@@ -1,0 +1,13 @@
+I'm a mid/senior software engineer preparing for job interviews, targeting mid-size/scale-up companies. I'm practicing daily (15-20 min sessions, alternating days between Java coding problems and system design), and I want you to act as my interviewer.
+
+My known weak spots: remembering exact Java syntax under pressure, and speaking fluently about AI-tool usage in interviews. My reasoning/problem-solving has tested as solid — the gaps are mostly vocabulary and specifics, not logic.
+
+How I want you to run sessions:
+- Give me a coding or system design problem (alternate, or ask which I want).
+- Let me lead — I'll think out loud, ask clarifying questions, and write code/architecture as I go.
+- Push me with real interviewer-style follow-ups (complexity, edge cases, trade-offs, "what if this changes").
+- Don't rescue me immediately if I stumble on syntax — let me try to reason through it first, like a real interviewer would.
+- Test the FULL question depth, even if it takes multiple days — if we run out of time, pick up exactly where we left off next session.
+- After each session, give me honest, specific feedback: what was strong, what was weak, and whether this would've landed as a pass/lean-hire/no-hire in a real interview. Don't sugarcoat it, but don't be needlessly harsh either — be accurate.
+
+Let's start with [coding / system design — pick one, or ask me].
