@@ -225,3 +225,5 @@ Persistent workspaces containing three elements:
 3. **Model tiers = speed-capability trade-off.** Haiku (fast/structured/volume), Sonnet (most work), Opus (complex/high-stakes/ambiguous).
 4. **Context is a budget.** Long conversations degrade — Restart, Summarize, or Persist rather than pushing through drift.
 5. **Variation is inherent; review is structural.** Even configured Skills vary run to run — evaluation of output remains necessary (developed further in Module 3).
+
+

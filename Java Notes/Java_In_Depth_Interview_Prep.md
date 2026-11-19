@@ -2526,3 +2526,2857 @@ static void change(Student s) {
 ### Interview checklist
 
 Before moving on, you should be able to explain without notes: JVM vs JDK, source vs bytecode, class vs object, stack/heap as conceptual runtime areas, primitive vs reference, pass-by-value, overload vs override, constructor vs method, `==` vs `.equals()`, checked vs runtime failures, and why immutability helps API design.
+
+# Full Chapter-by-Chapter Deep-Dive Expansion
+
+> **How to use this expansion:** The original chapters remain intact. The sections below deepen each chapter with compiler rules, runtime behavior, edge cases, “allowed vs not allowed” distinctions, common interview traps, and short code checks.
+>
+> **Version note:** Java is evolving. Where language rules changed across releases, the examples below identify the relevant generation. For modern interview preparation, distinguish stable features from preview features and always ask which JDK version the interviewer expects.
+
+---
+
+## Deep Dive 1 — What Java Is and Why It Works
+
+### 1.1 Java is a language, platform, and ecosystem — do not collapse the terms
+
+In interviews, “Java” can mean several related things:
+
+- **Java language:** syntax and semantic rules defined primarily by the JLS.
+- **JVM:** the abstract machine that executes Java class files.
+- **JDK:** development kit containing the tools and runtime components needed to develop and run Java applications.
+- **Java SE APIs:** standard libraries such as `String`, collections, I/O, concurrency, and time.
+- **Java ecosystem:** build tools, frameworks, application servers, IDEs, vendors, libraries, and deployment platforms.
+
+A strong answer distinguishes these rather than saying “Java is the JVM.”
+
+### 1.2 Why Java is called platform independent
+
+The source is compiled into **bytecode**, not directly into one machine's native instruction set:
+
+```text
+Java source
+    |
+    | javac
+    v
+.class bytecode
+    |
+    | JVM implementation for OS/CPU
+    v
+machine execution
+```
+
+The important qualification is:
+
+> Java bytecode is designed to be portable; a JVM implementation is platform-specific.
+
+Therefore “write once, run anywhere” is an architectural goal, not a promise that every application has zero platform-specific behavior.
+
+### 1.3 Language portability vs application portability
+
+A Java program can still depend on:
+
+- operating-system paths,
+- native libraries,
+- environment variables,
+- file encodings,
+- locale,
+- time zone,
+- native system calls,
+- external services.
+
+So the language/runtime can be portable while an individual application is not fully portable.
+
+### 1.4 Interview traps
+
+**Question:** Is Java interpreted or compiled?
+
+**Answer:** Both concepts can apply at different stages. Java source is compiled to bytecode; the JVM may interpret bytecode and/or JIT-compile hot code to native machine code.
+
+**Question:** Is Java compiled to machine code?
+
+**Answer:** Eventually, possibly through JIT compilation, but `javac` normally produces class-file bytecode rather than target-CPU machine code.
+
+---
+
+## Deep Dive 2 — Where Java Came From
+
+### 2.1 What interviewers usually want
+
+Historical questions are generally testing whether you understand the evolution of the platform, not whether you memorized trivia.
+
+Know the broad sequence:
+
+```text
+Oak project
+   -> Java
+   -> Java 1.0
+   -> Java 2 platform terminology
+   -> Java SE / EE / ME
+   -> Java 8 major functional-programming additions
+   -> Java 9 modules
+   -> six-month release cadence
+   -> modern releases with records, sealed types, pattern matching, etc.
+```
+
+### 2.2 Important historical distinction
+
+Java's name and branding changed over time. Avoid confidently claiming that a modern term was always used historically.
+
+### 2.3 Interview-ready evolution
+
+The most useful language milestones are:
+
+- Java 5: generics, annotations, enums, enhanced `for`, autoboxing.
+- Java 7: try-with-resources, multi-catch, diamond operator, `String` in `switch`.
+- Java 8: lambdas, streams, method references, default interface methods, `java.time`.
+- Java 9: modules, private interface methods, collection factory methods.
+- Java 10: `var` for local variable type inference.
+- Java 14/15 era: switch expressions and text blocks progressed to permanent features.
+- Java 16: records and pattern matching for `instanceof` became permanent.
+- Java 17: sealed classes became permanent.
+- Java 21: record patterns, pattern `switch`, and other modern language/library features became important.
+- Later releases continue adding language/library improvements.
+
+The interview value is understanding *why* features were added: less boilerplate, stronger modeling, safer pattern matching, better modularity, and more expressive APIs.
+
+---
+
+## Deep Dive 3 — Source Code, Compilation, and Platform Dependency
+
+### 3.1 `javac` does more than “translate code”
+
+The compiler performs tasks including:
+
+- lexical and syntactic analysis,
+- type checking,
+- overload resolution,
+- definite-assignment analysis,
+- generic type checking,
+- conversion checks,
+- bytecode generation,
+- some compile-time optimizations.
+
+Conceptually:
+
+```text
+source -> tokens -> syntax tree -> semantic/type checks -> bytecode
+```
+
+### 3.2 Compile-time error vs runtime error
+
+This distinction is extremely important.
+
+**Compile-time:**
+
+```java
+int x = "hello"; // incompatible types
+```
+
+The program does not produce a class file for this source as written.
+
+**Runtime:**
+
+```java
+String s = null;
+System.out.println(s.length()); // NullPointerException
+```
+
+The source can compile but fail during execution.
+
+### 3.3 Checked vs unchecked is not the same distinction
+
+Do not confuse:
+
+- compile-time vs runtime,
+- checked vs unchecked exceptions.
+
+A checked exception affects compilation rules around exception handling. An unchecked exception can still be detected by static analysis tools, but Java does not require catch/declare handling for it.
+
+### 3.4 Class files are not simply “the source in binary form”
+
+A class file contains structured JVM information such as:
+
+- version,
+- constant pool,
+- fields,
+- methods,
+- bytecode,
+- attributes,
+- access flags.
+
+This is why source syntax and bytecode representation are related but not identical.
+
+### 3.5 Interview trap: compiler and JVM responsibilities
+
+The JVM does not normally decide whether this is a legal overload:
+
+```java
+void f(int x) {}
+void f(int y) {} // compile-time duplicate method
+```
+
+The Java compiler applies language-level overload rules. The JVM later works with the generated class-file representation.
+
+---
+
+## Deep Dive 4 — JVM and Java Bytecode
+
+### 4.1 JVM mental model
+
+A useful conceptual model is:
+
+```text
+Class loading
+    |
+Bytecode verification/linking
+    |
+Initialization
+    |
+Execution
+    |
+Interpreter + JIT + runtime services
+```
+
+### 4.2 Class loading is not the same as object creation
+
+Loading a class does not mean:
+
+```java
+new MyClass();
+```
+
+has happened.
+
+Class initialization and object construction are separate concepts.
+
+### 4.3 Stack vs heap: interview-safe explanation
+
+A simplified model:
+
+- Each thread has execution state associated with method calls.
+- Objects and arrays are generally allocated in heap memory.
+- Local variables can include primitive values and references.
+- A reference variable is not the object itself.
+
+Do not say “all local variables are always on the stack” as an absolute JVM implementation guarantee. JIT optimizations can change physical representation.
+
+### 4.4 Bytecode instructions
+
+You may encounter instructions conceptually corresponding to:
+
+- loading constants,
+- loading/storing locals,
+- arithmetic,
+- field access,
+- method invocation,
+- object creation,
+- branching,
+- returning,
+- throwing exceptions.
+
+### 4.5 JIT optimization
+
+A JVM may identify frequently executed (“hot”) code and compile it to optimized native code.
+
+Potential optimizations include:
+
+- inlining,
+- dead-code elimination,
+- escape-analysis-based optimizations,
+- devirtualization in suitable cases,
+- loop optimizations.
+
+Interview trap:
+
+> JIT optimization is not equivalent to “Java ignores types at runtime.”
+
+The JVM still enforces class-file and runtime type constraints.
+
+---
+
+## Deep Dive 5 — JDK, Java Platform, and Releases
+
+### 5.1 JDK vs JRE terminology
+
+For modern Java, avoid old explanations that imply a separately installed JRE package is always the normal development model.
+
+The **JDK** is the standard development distribution. It includes tools such as:
+
+```text
+java
+javac
+jar
+javadoc
+jdb
+```
+
+depending on the distribution/version.
+
+### 5.2 JLS vs JVMS vs API specification
+
+Memorize this distinction:
+
+| Specification | Main concern |
+|---|---|
+| JLS | Java language |
+| JVMS | JVM and class-file execution |
+| Java API docs | Library classes/methods/contracts |
+
+### 5.3 Feature release vs LTS
+
+A Java release can be a feature release without being the organization's chosen long-term-support baseline.
+
+In interviews, say:
+
+> “The organization may standardize on an LTS release, while the Java platform itself continues to receive regular feature releases.”
+
+### 5.4 Preview features
+
+Preview features are deliberately different from permanent language features.
+
+If asked whether a feature “exists in Java,” clarify:
+
+- final/permanent feature,
+- preview feature,
+- incubator feature,
+- vendor-specific extension.
+
+---
+
+## Deep Dive 6 — Installation, `PATH`, and `JAVA_HOME`
+
+### 6.1 `PATH` is command discovery
+
+If a shell executes:
+
+```bash
+java --version
+```
+
+it searches configured executable locations.
+
+`PATH` answers:
+
+> “Where should the shell look for executables?”
+
+### 6.2 `JAVA_HOME`
+
+`JAVA_HOME` conventionally points to the JDK home:
+
+```text
+JAVA_HOME
+   |
+   +-- bin
+   +-- lib
+   +-- ...
+```
+
+It normally should not point directly to `bin`.
+
+### 6.3 Why `java` can work but `javac` cannot
+
+Possible causes include:
+
+- a runtime launcher earlier on `PATH`,
+- multiple JDK installations,
+- stale shell configuration,
+- an incomplete `PATH`,
+- a different Java distribution being selected.
+
+Use:
+
+```bash
+java --version
+javac --version
+```
+
+and, where appropriate, the OS command for locating the executable.
+
+### 6.4 Interview trap
+
+`JAVA_HOME` and `PATH` are not synonyms.
+
+```text
+JAVA_HOME = location of JDK
+PATH      = executable search path
+```
+
+---
+
+## Deep Dive 7 — Classpath, Modules, and Running Code
+
+### 7.1 Classpath
+
+Classpath is a search path for classes and resources.
+
+Typical forms include:
+
+```bash
+java -cp out com.example.Main
+```
+
+and:
+
+```bash
+java -cp "lib/*:out" com.example.Main
+```
+
+The path separator differs by operating system.
+
+### 7.2 `PATH` vs classpath
+
+This is a classic interview question:
+
+```text
+PATH       -> finds commands/executables
+CLASSPATH  -> helps Java locate classes/resources
+module path -> locates modules
+```
+
+### 7.3 `CLASSPATH` environment variable
+
+A global `CLASSPATH` can make behavior harder to reproduce because commands inherit hidden dependencies.
+
+Explicit `-cp` is often clearer.
+
+### 7.4 Modules
+
+Java modules add explicit concepts such as:
+
+```java
+module com.example.app {
+    requires java.sql;
+    exports com.example.api;
+}
+```
+
+Know:
+
+- `requires` = dependency on another module,
+- `exports` = packages exposed to other modules,
+- `opens` = reflective access concerns,
+- module path = location of modules.
+
+### 7.5 Classpath vs module path
+
+A module-path application has stronger module metadata than a flat classpath application.
+
+Interview trap:
+
+> A package and a module are not the same thing.
+
+A module can contain packages; a package can be exported by a module.
+
+---
+
+## Deep Dive 8 — Your First Java Program
+
+### 8.1 Entry point
+
+The conventional entry point is:
+
+```java
+public static void main(String[] args) {
+}
+```
+
+Understand every piece:
+
+- `public` — accessible to the launcher under the conventional entry-point model.
+- `static` — callable without creating an instance.
+- `void` — returns no value.
+- `main` — special method name.
+- `String[] args` — command-line arguments.
+
+Modern Java has introduced additional compact/instance-main forms in newer releases, but interviewers may still expect the conventional form.
+
+### 8.2 `String[] args`
+
+If launched with:
+
+```bash
+java Main one two
+```
+
+then:
+
+```text
+args[0] = "one"
+args[1] = "two"
+```
+
+There is no automatic numeric conversion.
+
+### 8.3 `System.out`
+
+`System.out` is a standard output stream reference.
+
+Do not describe it as “a function.” It is a field referring to a `PrintStream`.
+
+### 8.4 Source file and public class
+
+A public top-level class conventionally matches the source file name:
+
+```java
+public class Main {}
+```
+
+should normally be stored as:
+
+```text
+Main.java
+```
+
+This is a language/compiler rule worth knowing.
+
+---
+
+## Deep Dive 9 — Classes and Objects
+
+### 9.1 Class is a type definition
+
+A class can contain:
+
+- fields,
+- methods,
+- constructors,
+- nested classes/interfaces,
+- initialization blocks.
+
+Example:
+
+```java
+class Account {
+    private double balance;
+
+    void deposit(double amount) {
+        balance += amount;
+    }
+}
+```
+
+### 9.2 Object identity vs state
+
+Two objects can have equal state but different identity:
+
+```java
+Account a = new Account();
+Account b = new Account();
+```
+
+`a` and `b` are different object references even if their fields happen to match.
+
+### 9.3 Reference variable vs object
+
+```java
+Account a = new Account();
+```
+
+Conceptually:
+
+```text
+a -----> Account object
+```
+
+The variable stores a reference value. It is not the object itself.
+
+### 9.4 `new`
+
+`new` creates an object or array and causes constructor/initialization behavior for objects.
+
+It does not mean “put everything on the heap” as a simple language-level guarantee; JVM optimizations may alter physical allocation.
+
+### 9.5 Interview traps
+
+- Class ≠ object.
+- Reference ≠ object.
+- `==` on references checks identity, not logical equality.
+- A variable can be `null`; the variable still exists even though it refers to no object.
+
+---
+
+## Deep Dive 10 — Java Syntax Basics
+
+### 10.1 Lexical rules
+
+Know the difference between:
+
+- keywords,
+- identifiers,
+- literals,
+- operators,
+- separators,
+- comments.
+
+### 10.2 Identifier edge cases
+
+These are legal in principle:
+
+```java
+int $value = 1;
+int value_2 = 2;
+```
+
+This is not:
+
+```java
+int 2value = 2;
+```
+
+A single `_` is not a valid ordinary identifier in modern Java.
+
+### 10.3 Keywords and contextual keywords
+
+Not every word that looks special behaves exactly like a traditional keyword in every syntactic context. Modern Java has contextual keywords such as `var` and `record`.
+
+Interview trap:
+
+> `var` does not mean “dynamic typing.”
+
+The compiler infers a static type.
+
+### 10.4 Semicolon
+
+A semicolon terminates many statements, but not every Java construct uses one directly:
+
+```java
+if (x > 0) {
+    ...
+}
+```
+
+No semicolon follows the closing brace of the `if` statement.
+
+### 10.5 Empty statement
+
+This is legal:
+
+```java
+;
+```
+
+It is an empty statement.
+
+That makes this dangerous:
+
+```java
+if (ready);
+{
+    work();
+}
+```
+
+The `if` controls only the empty statement.
+
+---
+
+## Deep Dive 11 — Variables and Primitive Types
+
+### 11.1 Primitive types
+
+The eight primitive types are:
+
+```text
+byte short int long
+float double
+char
+boolean
+```
+
+### 11.2 Local variable vs field initialization
+
+Fields receive default values:
+
+```java
+class Demo {
+    int count;       // 0
+    boolean active;  // false
+    String name;     // null
+}
+```
+
+Local variables do not:
+
+```java
+void f() {
+    int count;
+    System.out.println(count); // compile-time error
+}
+```
+
+### 11.3 Default values
+
+Reference fields:
+
+```text
+null
+```
+
+Integral fields:
+
+```text
+0
+```
+
+floating-point fields:
+
+```text
+0.0 / 0.0f
+```
+
+boolean:
+
+```text
+false
+```
+
+char:
+
+```text
+'\u0000'
+```
+
+### 11.4 `final` variables
+
+A `final` variable can be assigned once.
+
+```java
+final int x = 10;
+```
+
+But:
+
+```java
+final List<String> list = new ArrayList<>();
+list.add("A"); // allowed
+```
+
+The reference cannot be reassigned; the referenced object may still be mutable.
+
+### 11.5 `var`
+
+Legal:
+
+```java
+var name = "Java";
+var count = 10;
+```
+
+Illegal:
+
+```java
+var x;          // no initializer
+var n = null;   // cannot infer a type
+var x = 1, y=2; // not a multi-variable declaration
+```
+
+`var` is for local variable type inference, not fields or method parameters.
+
+---
+
+## Deep Dive 12 — Integer, Floating-Point, `char`, and `boolean`
+
+### 12.1 Integer literal rules
+
+By default:
+
+```java
+10        // int
+10L       // long
+```
+
+Binary, octal, decimal, and hexadecimal forms exist.
+
+Underscores can improve readability:
+
+```java
+1_000_000
+0xFF_FF
+```
+
+but cannot be placed arbitrarily around the literal syntax.
+
+### 12.2 Integer overflow
+
+Java integer arithmetic does not automatically throw an overflow exception for ordinary primitive integer overflow.
+
+```java
+int x = Integer.MAX_VALUE;
+int y = x + 1;
+```
+
+The result wraps according to two's-complement integer representation.
+
+Use wider types or checked/domain-specific arithmetic when overflow matters.
+
+### 12.3 Floating point
+
+`double` is the default floating-point literal type.
+
+```java
+double d = 1.5;
+float f = 1.5f;
+```
+
+Floating-point values follow IEEE-style semantics and can represent special values such as:
+
+```text
+NaN
++Infinity
+-Infinity
+```
+
+### 12.4 `NaN`
+
+A particularly useful interview trap:
+
+```java
+double x = Double.NaN;
+System.out.println(x == x); // false
+```
+
+Use `Double.isNaN(x)` to test for NaN.
+
+### 12.5 `char`
+
+`char` is a UTF-16 code unit, not a guarantee of a complete Unicode character.
+
+Some Unicode characters require a surrogate pair and therefore occupy two `char` values.
+
+### 12.6 `boolean`
+
+Java does not permit C-style truthiness:
+
+```java
+if (1) { } // invalid
+```
+
+The condition must be boolean.
+
+---
+
+## Deep Dive 13 — Type Casting and Numeric Conversion
+
+### 13.1 Widening primitive conversion
+
+Typical widening:
+
+```text
+byte -> short -> int -> long -> float -> double
+char -> int -> long -> float -> double
+```
+
+Not every step is “exact” in terms of mathematical precision; for example, moving from `long` to `float` can lose integer precision.
+
+### 13.2 Narrowing
+
+Explicit casts are commonly required:
+
+```java
+double d = 9.8;
+int x = (int) d; // 9
+```
+
+The cast does not round to nearest integer.
+
+### 13.3 Constant expressions are special
+
+A compile-time constant may fit into a smaller type:
+
+```java
+byte b = 100; // allowed
+```
+
+but:
+
+```java
+int x = 1000;
+byte b = x;   // not allowed without cast
+```
+
+The compiler can use the known constant value in certain narrowing assignment contexts.
+
+### 13.4 Numeric promotion
+
+In expressions, smaller integer types often promote to `int`:
+
+```java
+byte a = 1;
+byte b = 2;
+int c = a + b;
+```
+
+This does not compile:
+
+```java
+byte c = a + b;
+```
+
+without an explicit cast.
+
+### 13.5 Casts can change runtime type behavior
+
+Reference casts:
+
+```java
+Object o = "hello";
+String s = (String) o;
+```
+
+can compile but throw `ClassCastException` if the actual object is incompatible.
+
+---
+
+## Deep Dive 14 — References, Objects, `null`, and the Heap
+
+### 14.1 `null` is a special reference value
+
+A reference can contain:
+
+```java
+String s = null;
+```
+
+It means the reference does not currently identify an object.
+
+### 14.2 Dereferencing null
+
+```java
+s.length();
+```
+
+when `s == null` causes `NullPointerException`.
+
+### 14.3 Assignment copies the reference value
+
+```java
+Person a = new Person();
+Person b = a;
+```
+
+Now both references identify the same object:
+
+```text
+a ----\
+       > Person object
+b ----/
+```
+
+Changing the object's mutable state through `b` can be observed through `a`.
+
+### 14.4 Reassigning a reference is different
+
+```java
+b = new Person();
+```
+
+Now `b` points elsewhere; `a` still points to the original object.
+
+### 14.5 Java is pass-by-value
+
+For:
+
+```java
+void change(Person p) {
+    p = new Person();
+}
+```
+
+the caller's reference variable does not change.
+
+But:
+
+```java
+void change(Person p) {
+    p.name = "new";
+}
+```
+
+can mutate the object that both references identify.
+
+### 14.6 Garbage collection
+
+An object becomes eligible for collection when it is no longer reachable through the relevant live object graph.
+
+Do not say:
+
+> “Calling `System.gc()` guarantees immediate garbage collection.”
+
+It does not.
+
+---
+
+## Deep Dive 15 — Statements, Expressions, and Scope
+
+### 15.1 Expression
+
+An expression can produce a value:
+
+```java
+a + b
+method()
+x > 10
+```
+
+### 15.2 Statement
+
+Examples include:
+
+```java
+x = 10;
+return x;
+if (x > 0) { ... }
+```
+
+### 15.3 Declaration statement
+
+```java
+int x = 10;
+```
+
+contains a declaration and initializer.
+
+### 15.4 Scope
+
+Scope determines where a name can be referred to.
+
+Examples:
+
+- local variable scope,
+- parameter scope,
+- field scope,
+- class/member scope,
+- pattern-variable scope.
+
+Modern pattern matching makes scope questions especially important:
+
+```java
+if (obj instanceof String s && !s.isBlank()) {
+    System.out.println(s.length());
+}
+```
+
+`s` is available where the compiler can prove the pattern matched.
+
+### 15.5 Definite assignment
+
+The compiler reasons about whether a local variable is definitely assigned:
+
+```java
+int x;
+if (condition) {
+    x = 10;
+}
+System.out.println(x); // compile-time error
+```
+
+unless the compiler can prove every path assigns it.
+
+---
+
+## Deep Dive 16 — Operators
+
+### 16.1 Precedence is not evaluation order
+
+These are separate concepts.
+
+Precedence answers:
+
+> How is an expression grouped?
+
+Evaluation order answers:
+
+> Which operand is evaluated first?
+
+Java generally evaluates operands left-to-right.
+
+### 16.2 Short-circuit operators
+
+```java
+a && b
+a || b
+```
+
+may avoid evaluating the right operand.
+
+Example:
+
+```java
+if (obj != null && obj.isReady()) {
+    ...
+}
+```
+
+The second operand is not evaluated when the first is false.
+
+### 16.3 `&` and `|`
+
+For booleans:
+
+```java
+a & b
+a | b
+```
+
+evaluate both operands.
+
+They are also bitwise operators for integral types.
+
+### 16.4 `==`
+
+For primitives, `==` compares values.
+
+For references, it compares whether the two references identify the same object (or both are `null`).
+
+### 16.5 `equals`
+
+`.equals()` is a method and can implement logical equality.
+
+Never assume every class overrides it.
+
+### 16.6 Ternary operator
+
+```java
+String result = condition ? "yes" : "no";
+```
+
+The conditional operator has type rules of its own, including numeric and reference conditional typing.
+
+### 16.7 Increment traps
+
+```java
+int x = 5;
+int y = x++;
+```
+
+means:
+
+```text
+y receives old x
+x is then incremented
+```
+
+Prefer readable code outside interview puzzles.
+
+---
+
+## Deep Dive 17 — Conditions and `switch`
+
+### 17.1 Classic switch: the old model
+
+Traditional syntax:
+
+```java
+switch (day) {
+    case 1:
+        System.out.println("Mon");
+        break;
+    case 2:
+        System.out.println("Tue");
+        break;
+    default:
+        System.out.println("Other");
+}
+```
+
+Without an exit:
+
+```java
+case 1:
+    work1();
+case 2:
+    work2();
+```
+
+execution can fall through.
+
+### 17.2 Modern arrow rules
+
+```java
+switch (day) {
+    case 1 -> work1();
+    case 2 -> work2();
+    default -> workOther();
+}
+```
+
+Arrow rules do not accidentally fall through.
+
+### 17.3 Switch expression
+
+```java
+String label = switch (day) {
+    case 1 -> "Mon";
+    case 2 -> "Tue";
+    default -> "Other";
+};
+```
+
+The switch produces a value.
+
+### 17.4 `yield`
+
+For a block rule:
+
+```java
+int result = switch (x) {
+    case 1 -> {
+        int y = expensiveCalculation();
+        yield y + 1;
+    }
+    default -> 0;
+};
+```
+
+`yield` supplies the value of that switch-expression arm.
+
+### 17.5 What can be a selector?
+
+This changed across Java versions.
+
+Historically, classic switch supported integral types such as:
+
+```text
+byte, short, char, int
+```
+
+plus corresponding wrappers, `String`, and enums.
+
+Modern enhanced switch supports reference types and patterns. Newer Java specifications have continued expanding selector capabilities; interview answers should state the target JDK version rather than mixing rules from different releases.
+
+### 17.6 What can be a case label?
+
+Classic labels use constants or enum constants:
+
+```java
+case 1:
+case 'A':
+case "READY":
+case SOME_ENUM:
+```
+
+A normal mutable variable is not a case constant:
+
+```java
+int x = 10;
+switch (value) {
+    case x:   // invalid
+}
+```
+
+A compile-time constant can be:
+
+```java
+final int X = 10;
+case X:
+```
+
+when it satisfies the language's constant-variable rules.
+
+### 17.7 Duplicate case values
+
+Two labels cannot represent the same case value.
+
+```java
+case 1:
+case 1: // compile-time error
+```
+
+### 17.8 `null`
+
+Classic switches historically rejected a `null` selector because the underlying behavior involved unboxing or String/enum handling that did not define null as an ordinary case.
+
+Modern pattern switch added explicit support for `case null` in enhanced switch:
+
+```java
+case null -> "missing";
+```
+
+This is version-sensitive and should be answered with the JDK version.
+
+### 17.9 Pattern matching
+
+Modern switch can match types:
+
+```java
+static String describe(Object value) {
+    return switch (value) {
+        case String s -> "string: " + s;
+        case Integer i -> "integer: " + i;
+        default -> "other";
+    };
+}
+```
+
+### 17.10 Dominance
+
+A broad pattern can make a later narrower pattern unreachable:
+
+```java
+case Object o -> ...
+case String s -> ... // dominated/unreachable
+```
+
+The general rule is:
+
+> A case that would match everything relevant before a later case can make the later case impossible to select.
+
+### 17.11 Exhaustiveness
+
+Switch expressions must be exhaustive.
+
+For enum-like or sealed hierarchies, the compiler can sometimes establish coverage without an explicit `default`.
+
+### 17.12 Switch interview checklist
+
+When given a switch question, ask:
+
+1. Which Java version?
+2. Statement or expression?
+3. Colon or arrow syntax?
+4. Selector type?
+5. Constant case or pattern case?
+6. Can `null` occur?
+7. Is fall-through possible?
+8. Is the switch exhaustive?
+9. Is a case dominated?
+10. Is `break`, `yield`, `return`, or `throw` being used?
+
+---
+
+## Deep Dive 18 — Loops
+
+### 18.1 `for`
+
+```java
+for (int i = 0; i < 10; i++) {
+    ...
+}
+```
+
+Three components are optional:
+
+```java
+for (;;) {
+    // infinite loop unless exited
+}
+```
+
+### 18.2 `while`
+
+Condition is tested before the body:
+
+```java
+while (condition) {
+    ...
+}
+```
+
+The body may execute zero times.
+
+### 18.3 `do-while`
+
+Condition is tested after the body:
+
+```java
+do {
+    ...
+} while (condition);
+```
+
+The body executes at least once.
+
+### 18.4 Enhanced `for`
+
+```java
+for (String s : names) {
+    ...
+}
+```
+
+Works with arrays and `Iterable` values.
+
+### 18.5 `break`
+
+Exits the nearest loop or switch, or a specified labeled statement.
+
+### 18.6 `continue`
+
+Skips to the next loop iteration.
+
+### 18.7 Labeled loops
+
+```java
+outer:
+for (...) {
+    for (...) {
+        if (done) break outer;
+    }
+}
+```
+
+Useful to understand, but often less readable than extracting a method or redesigning control flow.
+
+### 18.8 Modification during enhanced iteration
+
+Modifying a collection structurally while iterating can produce `ConcurrentModificationException` for fail-fast iterators, depending on the collection and operation.
+
+This is not the same as a guaranteed thread-safety mechanism.
+
+---
+
+## Deep Dive 19 — Arrays
+
+### 19.1 Arrays are objects
+
+Even a primitive array is an object:
+
+```java
+int[] a = new int[3];
+```
+
+Therefore:
+
+```java
+a instanceof Object
+```
+
+is true.
+
+### 19.2 Array type is covariant
+
+```java
+String[] strings = new String[2];
+Object[] objects = strings;
+```
+
+This compiles.
+
+But:
+
+```java
+objects[0] = Integer.valueOf(1);
+```
+
+throws `ArrayStoreException`.
+
+This is a high-value interview trap.
+
+### 19.3 `length` is a field, not a method
+
+Correct:
+
+```java
+a.length
+```
+
+Incorrect:
+
+```java
+a.length()
+```
+
+### 19.4 Default values
+
+```java
+new int[3]      // [0,0,0]
+new boolean[3]  // [false,false,false]
+new String[3]   // [null,null,null]
+```
+
+### 19.5 Multidimensional arrays are arrays of arrays
+
+```java
+int[][] a = new int[3][];
+a[0] = new int[5];
+a[1] = new int[2];
+```
+
+Rows can have different lengths.
+
+### 19.6 Array cloning
+
+```java
+int[] b = a.clone();
+```
+
+For a one-dimensional primitive array, element values are copied.
+
+For arrays of references, the references are copied; referenced objects are not recursively cloned.
+
+---
+
+## Deep Dive 20 — Methods
+
+### 20.1 Method signature
+
+For Java overloading, the method signature is based on:
+
+- method name,
+- type parameters (where relevant to the formal definition),
+- formal parameter types after the language's signature rules.
+
+The return type alone is not part of the signature used to distinguish overloads.
+
+### 20.2 Illegal overloads
+
+Not allowed:
+
+```java
+int f(int x) { return x; }
+long f(int x) { return x; } // invalid
+```
+
+Also not distinguished by:
+
+```java
+void f(int x) {}
+void f(final int x) {} // invalid duplicate
+```
+
+Parameter variable names do not matter.
+
+### 20.3 Legal overloads
+
+```java
+void f(int x) {}
+void f(long x) {}
+void f(String x) {}
+void f(int x, int y) {}
+```
+
+Parameter order matters:
+
+```java
+void f(int x, String y) {}
+void f(String x, int y) {}
+```
+
+### 20.4 `throws` does not overload
+
+```java
+void f() throws IOException {}
+void f() throws SQLException {}
+```
+
+These are not valid overloads solely because the checked exception differs.
+
+### 20.5 Varargs and arrays
+
+These collide:
+
+```java
+void f(int[] x) {}
+void f(int... x) {} // same parameter type for signature purposes
+```
+
+Varargs is represented as an array parameter.
+
+### 20.6 Overload resolution phases
+
+A useful simplified interview model:
+
+1. Look for applicable methods without requiring boxing/unboxing or varargs where possible.
+2. Consider boxing/unboxing.
+3. Consider variable-arity invocation.
+
+The exact JLS process is more detailed, but this mental model explains many puzzles.
+
+### 20.7 Widening vs boxing
+
+Given:
+
+```java
+void f(long x) {}
+void f(Integer x) {}
+```
+
+and:
+
+```java
+f(10);
+```
+
+the `int -> long` widening conversion can be preferred over boxing to `Integer`.
+
+### 20.8 `null` and overload ambiguity
+
+```java
+void f(String s) {}
+void f(Integer i) {}
+
+f(null); // ambiguous
+```
+
+Both reference types can accept null and neither is more specific than the other.
+
+But:
+
+```java
+void f(Object o) {}
+void f(String s) {}
+
+f(null);
+```
+
+selects `String`, because `String` is more specific than `Object`.
+
+### 20.9 Generic overloads and erasure
+
+These cannot coexist after erasure:
+
+```java
+void f(List<String> x) {}
+void f(List<Integer> x) {}
+```
+
+Both erase to a method taking `List`.
+
+### 20.10 Constructors can overload
+
+Constructors have no return type and can be overloaded:
+
+```java
+Person() {}
+Person(String name) {}
+Person(String name, int age) {}
+```
+
+### 20.11 Overloading vs overriding
+
+**Overloading:** same class/name family, different parameter lists; resolved primarily at compile time.
+
+**Overriding:** subclass supplies a compatible implementation of an inherited instance method; dynamic dispatch matters at runtime.
+
+### 20.12 Static methods
+
+Static methods are hidden, not overridden in the same polymorphic sense as instance methods.
+
+---
+
+## Deep Dive 21 — Constructors and Object Initialization
+
+### 21.1 Constructor facts
+
+A constructor:
+
+- has the class name,
+- has no return type,
+- runs during object creation,
+- can be overloaded,
+- cannot be inherited like a normal method.
+
+### 21.2 Default constructor
+
+If you declare **no constructor**, the compiler can provide a default no-argument constructor with the appropriate access characteristics.
+
+If you declare any constructor, that automatic constructor is not generated.
+
+### 21.3 `this()`
+
+Constructor chaining within the same class:
+
+```java
+Person() {
+    this("Unknown");
+}
+
+Person(String name) {
+    this.name = name;
+}
+```
+
+`this(...)` must be the first explicit constructor invocation in the constructor body.
+
+### 21.4 `super()`
+
+A constructor can invoke a superclass constructor with:
+
+```java
+super(...);
+```
+
+If neither `this(...)` nor `super(...)` is explicitly used, an appropriate superclass no-argument constructor invocation is inserted subject to the language rules.
+
+### 21.5 Initialization order
+
+For an ordinary object, think broadly:
+
+```text
+class initialization if needed
+        |
+superclass instance initialization
+        |
+current class instance field initializers / instance blocks
+        |
+constructor body
+```
+
+The exact ordering and interaction with field initializers, superclass initialization, and constructor chaining should be understood rather than memorized as one sentence.
+
+### 21.6 Constructor exceptions
+
+Constructors can declare checked exceptions:
+
+```java
+Person() throws IOException {
+}
+```
+
+A caller must satisfy the normal checked-exception rules.
+
+---
+
+## Deep Dive 22 — Initialization Order
+
+### 22.1 Static initialization
+
+Static fields and static initialization are associated with class initialization.
+
+Example:
+
+```java
+class Demo {
+    static int x = init();
+
+    static {
+        System.out.println("static block");
+    }
+}
+```
+
+### 22.2 Instance initialization
+
+Instance field initializers and instance initializer blocks execute as part of object initialization.
+
+```java
+class Demo {
+    int x = 10;
+
+    {
+        x++;
+    }
+
+    Demo() {
+        x++;
+    }
+}
+```
+
+The final value reflects the ordering of these steps.
+
+### 22.3 Textual order matters
+
+Within a class, field initializers and initializer blocks generally execute in their textual order.
+
+### 22.4 Forward-reference traps
+
+Some references to fields from initializers are restricted by compile-time rules, especially for simple-name references to fields declared later in the same class.
+
+Interview questions often exploit:
+
+```java
+int x = y;  // ask whether legal
+int y = 10;
+```
+
+Do not answer from a simplistic “Java always allows forward references” rule.
+
+### 22.5 Class initialization triggers
+
+A class is initialized when required by the JVM's initialization rules, such as certain active uses of a static field or method, or object creation.
+
+Not every mention of a class name causes initialization.
+
+### 22.6 Static initialization and inheritance
+
+Initializing a subclass can involve initialization of its superclass first, because superclass initialization is required before subclass initialization.
+
+---
+
+## Deep Dive 23 — Encapsulation and Access Control
+
+### 23.1 Access levels
+
+| Modifier | Same class | Same package | Subclass other package | Other package |
+|---|---:|---:|---:|---:|
+| `private` | yes | no | no direct access | no |
+| package-private | yes | yes | only through package rules | no |
+| `protected` | yes | yes | yes, with important qualified-access rules | limited |
+| `public` | yes | yes | yes | yes |
+
+### 23.2 `protected` is a common trap
+
+In another package, a subclass does not get unrestricted access to a protected member through any arbitrary superclass-typed reference.
+
+The access is tied to the subclass context and qualifying expression rules.
+
+### 23.3 `private` methods
+
+Private methods are not inherited in the ordinary polymorphic sense.
+
+A subclass can declare a method with the same name/signature, but that does not override the superclass's private method.
+
+### 23.4 `final` method
+
+A `final` instance method cannot be overridden.
+
+### 23.5 `final` class
+
+A `final` class cannot be subclassed:
+
+```java
+final class Utility {}
+```
+
+### 23.6 Encapsulation
+
+Encapsulation is more than “make fields private.”
+
+It includes:
+
+- controlling mutation,
+- validating invariants,
+- exposing stable operations,
+- avoiding unnecessary representation leakage.
+
+---
+
+## Deep Dive 24 — Packages and Imports
+
+### 24.1 Package declaration
+
+```java
+package com.example.app;
+```
+
+The package is part of the class's fully qualified name:
+
+```text
+com.example.app.Main
+```
+
+### 24.2 Import
+
+```java
+import java.util.List;
+```
+
+An import primarily lets source code use a shorter name.
+
+It does not copy a class into your program.
+
+### 24.3 Wildcard import
+
+```java
+import java.util.*;
+```
+
+does not import subpackages.
+
+For example, it does not automatically import:
+
+```text
+java.util.concurrent.*
+```
+
+### 24.4 Static import
+
+```java
+import static java.lang.Math.PI;
+```
+
+lets source code refer to `PI` directly.
+
+### 24.5 Same simple name
+
+Two imported classes with the same simple name can create ambiguity.
+
+A fully qualified name can disambiguate:
+
+```java
+java.sql.Date
+java.util.Date
+```
+
+### 24.6 Package-private access
+
+If no access modifier is written for a top-level class/member where allowed, package-private access can apply.
+
+This is why package boundaries matter for encapsulation.
+
+---
+
+## Deep Dive 25 — String
+
+### 25.1 String is a final, immutable reference type
+
+A `String` is an object.
+
+```java
+String s = "hello";
+```
+
+The variable is a reference to a String object/value.
+
+### 25.2 Immutability
+
+This:
+
+```java
+String s = "hello";
+s.toUpperCase();
+```
+
+does not change `s`.
+
+Use:
+
+```java
+s = s.toUpperCase();
+```
+
+if you want the variable to refer to the new string.
+
+### 25.3 String pool
+
+String literals are interned.
+
+```java
+String a = "hello";
+String b = "hello";
+```
+
+They can refer to the same pooled string.
+
+But:
+
+```java
+String c = new String("hello");
+```
+
+creates a distinct String object.
+
+Therefore:
+
+```java
+a == b        // typically true for these literals
+a == c        // false
+a.equals(c)   // true
+```
+
+The logical rule to remember is not “String `==` is true”; it is:
+
+> `==` compares references, while `equals` compares String content.
+
+### 25.4 `intern()`
+
+`intern()` returns the canonical pooled representation for the string content.
+
+Use it only when you understand the memory/performance tradeoffs; it is not a general replacement for `equals`.
+
+### 25.5 Compile-time constant concatenation
+
+```java
+String a = "ab" + "cd";
+String b = "abcd";
+```
+
+The compiler can treat the concatenation as a constant expression, making pooling behavior relevant.
+
+But:
+
+```java
+String x = "ab";
+String c = x + "cd";
+```
+
+is not the same compile-time constant situation because `x` is a variable.
+
+### 25.6 Runtime concatenation
+
+Use:
+
+```java
+String result = a + b;
+```
+
+The compiler/runtime may implement concatenation efficiently. Do not assume every `+` literally creates a new `StringBuilder` object in exactly the same way on every Java release.
+
+### 25.7 StringBuilder vs StringBuffer
+
+- `StringBuilder`: mutable sequence, generally preferred for ordinary single-threaded construction.
+- `StringBuffer`: synchronized legacy alternative.
+
+### 25.8 Important String methods
+
+Know precisely:
+
+```java
+length()
+isEmpty()
+isBlank()
+charAt()
+codePointAt()
+substring()
+contains()
+startsWith()
+endsWith()
+indexOf()
+replace()
+replaceAll()
+split()
+trim()
+strip()
+stripLeading()
+stripTrailing()
+toLowerCase()
+toUpperCase()
+equals()
+equalsIgnoreCase()
+```
+
+### 25.9 `trim()` vs `strip()`
+
+`trim()` follows older, narrower whitespace rules.
+
+`strip()` uses Unicode-aware whitespace handling.
+
+### 25.10 `replace()` vs `replaceAll()`
+
+```java
+replace()
+```
+
+treats the target as literal character/sequence replacement.
+
+```java
+replaceAll()
+```
+
+uses a regular expression.
+
+So:
+
+```java
+"1.2.3".replaceAll(".", "-")
+```
+
+does **not** mean “replace literal dots”; `.` is a regex metacharacter matching broadly.
+
+Use:
+
+```java
+replace(".", "-")
+```
+
+for literal replacement.
+
+### 25.11 `split()` is regex-based
+
+```java
+"a.b.c".split(".")
+```
+
+does not split on literal dots as many beginners expect.
+
+Use:
+
+```java
+split("\\.")
+```
+
+or an appropriate literal-safe approach.
+
+### 25.12 Unicode and code points
+
+`String.length()` counts UTF-16 code units, not necessarily user-perceived characters.
+
+A supplementary Unicode code point may occupy two UTF-16 code units.
+
+Therefore:
+
+```java
+s.length()
+```
+
+and:
+
+```java
+s.codePoints().count()
+```
+
+can differ.
+
+### 25.13 `"null"` vs `null`
+
+These are different:
+
+```java
+String a = null;
+String b = "null";
+```
+
+Concatenation:
+
+```java
+System.out.println("value=" + a);
+```
+
+produces text containing `null`, but that does not mean the reference itself became the String `"null"`.
+
+### 25.14 String as switch selector
+
+String switch compares according to String content semantics rather than reference identity. Case labels are compile-time constants.
+
+---
+
+## Deep Dive 26 — Escape Sequences and Text Formatting
+
+### 26.1 Common escapes
+
+```text
+\n newline
+\t tab
+\r carriage return
+\b backspace
+\f form feed
+\\ backslash
+\' single quote
+\" double quote
+```
+
+### 26.2 Unicode escapes are processed early
+
+Unicode escape processing has lexical consequences and can surprise people because Unicode escapes are handled before much of the later tokenization process.
+
+Interview questions may exploit:
+
+```java
+// comments containing Unicode escapes
+```
+
+Do not assume an escape is “just text” because it visually appears inside a comment.
+
+### 26.3 Character literal vs string literal
+
+```java
+'A'     // char
+"A"     // String
+```
+
+They are different types.
+
+### 26.4 Formatting
+
+Useful tools include:
+
+```java
+String.format(...)
+System.out.printf(...)
+```
+
+and modern text blocks for multiline text.
+
+### 26.5 Text blocks
+
+Text blocks use:
+
+```java
+String json = """
+    {
+      "name": "Java"
+    }
+    """;
+```
+
+The closing delimiter and incidental indentation rules matter.
+
+### 26.6 Formatting and locale
+
+Numeric and date formatting can be locale-sensitive.
+
+For predictable machine-readable output, explicitly choose locale/format rules rather than relying on the user's environment.
+
+---
+
+## Deep Dive 27 — The Java API
+
+### 27.1 API literacy is an interview skill
+
+Do not memorize every method. Know how to find the correct API contract.
+
+Core packages worth recognizing:
+
+```text
+java.lang
+java.util
+java.io
+java.nio
+java.time
+java.math
+java.net
+java.util.concurrent
+java.util.function
+java.util.stream
+```
+
+### 27.2 `java.lang`
+
+Automatically imported for ordinary source use.
+
+Examples:
+
+```text
+String
+Object
+System
+Math
+Integer
+Thread
+Exception
+```
+
+### 27.3 `java.util`
+
+Common utilities:
+
+```text
+List
+Set
+Map
+Queue
+Optional
+Objects
+Collections
+Arrays
+```
+
+### 27.4 `java.time`
+
+Modern date/time APIs:
+
+```text
+LocalDate
+LocalDateTime
+Instant
+ZonedDateTime
+Duration
+Period
+DateTimeFormatter
+```
+
+Interview trap:
+
+> `LocalDateTime` is not automatically an instant in UTC. It has no time-zone/offset information.
+
+### 27.5 `java.io` vs `java.nio`
+
+`java.nio`/NIO.2 provides modern path/file APIs such as:
+
+```java
+Path
+Files
+```
+
+Know the distinction between:
+
+- byte streams,
+- character streams,
+- buffered I/O,
+- channels/buffers,
+- NIO paths/files.
+
+### 27.6 `Optional`
+
+`Optional<T>` is primarily a return-type modeling tool for possible absence.
+
+It is not automatically a replacement for every nullable field, parameter, or local variable.
+
+---
+
+## Deep Dive 28 — Math
+
+### 28.1 `Math` methods and return types
+
+Know that some methods return `double` even for integer-looking input:
+
+```java
+Math.sqrt(25) // 5.0
+Math.pow(2, 3) // 8.0
+```
+
+### 28.2 `abs` overflow trap
+
+For signed integer minimum values, absolute value can be surprising because the positive counterpart may not be representable.
+
+Conceptually:
+
+```java
+Math.abs(Integer.MIN_VALUE)
+```
+
+does not produce `Integer.MAX_VALUE`.
+
+### 28.3 `round`, `floor`, `ceil`
+
+Know the conceptual differences:
+
+```text
+floor -> toward negative infinity
+ceil  -> toward positive infinity
+round -> nearest integer-style result according to API rules
+```
+
+Negative numbers are where interview questions become interesting.
+
+### 28.4 `random`
+
+```java
+Math.random()
+```
+
+returns a `double` in:
+
+```text
+[0.0, 1.0)
+```
+
+The upper bound is exclusive.
+
+### 28.5 Floating-point equality
+
+Avoid assuming:
+
+```java
+0.1 + 0.2 == 0.3
+```
+
+is a safe exact-decimal comparison.
+
+Floating-point representation can produce a nearby value.
+
+For exact decimal requirements, consider `BigDecimal` and carefully chosen construction.
+
+---
+
+## Deep Dive 29 — Boxing, Unboxing, and Wrapper Types
+
+### 29.1 Boxing
+
+```java
+Integer x = 10;
+```
+
+conceptually converts primitive `int` to `Integer`.
+
+### 29.2 Unboxing
+
+```java
+Integer x = 10;
+int y = x;
+```
+
+converts `Integer` to `int`.
+
+### 29.3 Null unboxing
+
+```java
+Integer x = null;
+int y = x;
+```
+
+fails at runtime with `NullPointerException`.
+
+### 29.4 Wrapper identity trap
+
+Do not write:
+
+```java
+Integer a = 1000;
+Integer b = 1000;
+
+if (a == b) { ... }
+```
+
+to test numeric equality.
+
+Use:
+
+```java
+a.equals(b)
+```
+
+or unbox intentionally.
+
+Some wrapper values may be cached, so identity can appear to work for certain small values.
+
+### 29.5 Mixed arithmetic
+
+```java
+Integer a = 10;
+Long b = 20L;
+long c = a + b;
+```
+
+unboxing and numeric promotion are involved.
+
+### 29.6 Generics require reference types
+
+Invalid:
+
+```java
+List<int> values;
+```
+
+Valid:
+
+```java
+List<Integer> values;
+```
+
+### 29.7 Wrapper constants and parsing
+
+Know the difference between:
+
+```java
+Integer.valueOf("10")
+Integer.parseInt("10")
+```
+
+The first returns an `Integer`; the second returns a primitive `int`.
+
+### 29.8 Equality and null safety
+
+```java
+Objects.equals(a, b)
+```
+
+can be useful when either reference may be null.
+
+---
+
+## Deep Dive 30 — Coding Conventions and Writing Better Java
+
+### 30.1 Readability is a technical property
+
+Readable code reduces:
+
+- defect probability,
+- onboarding cost,
+- debugging time,
+- review effort.
+
+### 30.2 Prefer intention-revealing names
+
+Compare:
+
+```java
+int d;
+```
+
+with:
+
+```java
+int retryDelaySeconds;
+```
+
+The second communicates domain meaning.
+
+### 30.3 Method size is not the only metric
+
+A tiny method is not automatically good. Look for:
+
+- cohesion,
+- clear responsibility,
+- predictable side effects,
+- useful abstraction,
+- appropriate error handling.
+
+### 30.4 Avoid clever interview code
+
+If a candidate can write:
+
+```java
+if (++i < n && array[i++] != target) ...
+```
+
+that does not mean the code is good.
+
+Prefer:
+
+```java
+i++;
+if (i < n && array[i] != target) {
+    ...
+}
+```
+
+when clarity matters.
+
+### 30.5 Immutability
+
+Prefer immutable values when practical.
+
+Benefits include:
+
+- easier reasoning,
+- safer sharing,
+- fewer accidental side effects,
+- easier concurrency reasoning.
+
+### 30.6 `equals` and `hashCode`
+
+If a class overrides `equals`, it generally must also override `hashCode` consistently.
+
+Core contract:
+
+> Equal objects must have equal hash codes.
+
+The reverse is not required: unequal objects can share a hash code.
+
+### 30.7 Defensive copying
+
+If a class exposes mutable internal state directly, callers can violate invariants.
+
+Bad:
+
+```java
+public List<String> getNames() {
+    return names;
+}
+```
+
+Depending on the API contract, safer alternatives include unmodifiable views or defensive copies.
+
+### 30.8 Exceptions
+
+Use exceptions for exceptional conditions, not ordinary control flow.
+
+Know the distinction among:
+
+```text
+Error
+Exception
+RuntimeException
+checked exception
+unchecked exception
+```
+
+### 30.9 `final` as documentation
+
+`final` can communicate intent:
+
+```java
+final int maxRetries = 3;
+```
+
+It can prevent reassignment but does not make a referenced mutable object immutable.
+
+### 30.10 Performance
+
+Do not optimize based solely on folklore.
+
+Examples:
+
+- `StringBuilder` can help in repeated concatenation.
+- Collection choice should match access/update patterns.
+- Boxing can create overhead.
+- Streams are not automatically faster or slower than loops.
+- Allocation and GC behavior depend on the JVM and workload.
+
+Measure meaningful bottlenecks.
+
+---
+
+# Cross-Chapter Interview Trap Bank
+
+## A. Compile-time vs runtime
+
+### 1. Does this compile?
+
+```java
+int x;
+System.out.println(x);
+```
+
+**No.** Local variable is not definitely assigned.
+
+### 2. Does this compile?
+
+```java
+Integer x = null;
+int y = x;
+```
+
+**Yes.** It fails at runtime during unboxing.
+
+### 3. Does this compile?
+
+```java
+void f(int x) {}
+void f(long x) {}
+f(1);
+```
+
+**Yes.** `int` is an exact match for the first overload.
+
+---
+
+## B. Overloading traps
+
+### Legal
+
+```java
+void f(int x) {}
+void f(long x) {}
+void f(String x) {}
+void f(int x, long y) {}
+```
+
+### Illegal
+
+```java
+int f(int x) { return x; }
+long f(int x) { return x; } // return type only
+```
+
+### Illegal
+
+```java
+void f(int x) {}
+void f(final int x) {}
+```
+
+### Illegal
+
+```java
+void f(int[] x) {}
+void f(int... x) {}
+```
+
+### Potentially ambiguous
+
+```java
+void f(String x) {}
+void f(Integer x) {}
+f(null);
+```
+
+---
+
+## C. String traps
+
+```java
+String a = "x";
+String b = "x";
+String c = new String("x");
+```
+
+Remember:
+
+```text
+a == b        -> same pooled literal reference in this case
+a == c        -> different object
+a.equals(c)   -> same content
+```
+
+Also:
+
+```java
+"abc".substring(1, 2)
+```
+
+returns the characters in the half-open range:
+
+```text
+[1, 2)
+```
+
+so the result is `"b"`.
+
+---
+
+## D. Array traps
+
+```java
+String[] s = new String[2];
+Object[] o = s;
+o[0] = 10;
+```
+
+Compiles, but throws `ArrayStoreException` at runtime.
+
+---
+
+## E. `final` traps
+
+```java
+final int x = 10;
+```
+
+cannot be reassigned.
+
+But:
+
+```java
+final List<String> list = new ArrayList<>();
+list.add("x");
+```
+
+is allowed.
+
+The reference is final; the object is not necessarily immutable.
+
+---
+
+## F. Switch traps
+
+When analyzing a switch, explicitly classify:
+
+```text
+old colon syntax?
+arrow syntax?
+statement?
+expression?
+selector type?
+constant case?
+enum case?
+String case?
+pattern case?
+null case?
+fall-through?
+yield?
+exhaustiveness?
+dominance?
+```
+
+Do not answer a modern-switch question using only Java 7 rules.
+
+---
+
+# 100 Rapid-Fire Questions for Interview Practice
+
+1. What is bytecode?
+2. Why is the JVM platform-specific?
+3. What does `javac` produce?
+4. What is the difference between JDK, JVM, and Java SE?
+5. What does `PATH` do?
+6. What does `JAVA_HOME` conventionally point to?
+7. What is classpath?
+8. What is a module?
+9. What is the conventional `main` method?
+10. Is `String[]` an object?
+11. Is an array an object?
+12. What is the difference between a class and an object?
+13. What does `new` do?
+14. What is a reference?
+15. What does `null` mean?
+16. Why is Java pass-by-value?
+17. What is a primitive?
+18. What are Java's eight primitive types?
+19. What is the default literal type of `3.14`?
+20. Why use `L`?
+21. Why use `F`?
+22. Is `char` a Unicode character or UTF-16 code unit?
+23. What is integer overflow?
+24. What is `NaN`?
+25. What is widening conversion?
+26. What is narrowing conversion?
+27. What is numeric promotion?
+28. Why does `byte + byte` produce `int`?
+29. What is definite assignment?
+30. What is scope?
+31. What is an expression?
+32. What is a statement?
+33. What does `&&` short-circuit?
+34. What does `&` do with booleans?
+35. What does `==` do for references?
+36. What does `equals()` do?
+37. What is operator precedence?
+38. What is evaluation order?
+39. What is ternary typing?
+40. What is fall-through?
+41. What is a switch expression?
+42. What does `yield` do?
+43. What is a constant case label?
+44. Can a normal variable be a classic case label?
+45. Can `final int X = 10` be a case label?
+46. Can switch cases duplicate?
+47. What changed about switch across Java versions?
+48. What is `case null`?
+49. What is a type pattern?
+50. What is switch dominance?
+51. What is switch exhaustiveness?
+52. Difference between `for`, `while`, and `do-while`?
+53. What does `break` do?
+54. What does `continue` do?
+55. What is an enhanced `for`?
+56. What is an array's `length`?
+57. Are multidimensional arrays rectangular?
+58. What is array covariance?
+59. What is `ArrayStoreException`?
+60. What is a method signature?
+61. Can return type overload a method?
+62. Can `throws` overload a method?
+63. Can `final` parameter modifier overload a method?
+64. Can parameter order overload a method?
+65. Can array and varargs overload each other?
+66. What is overload resolution?
+67. How does `null` affect overload resolution?
+68. What is type erasure?
+69. Can generic methods erase to the same signature?
+70. What is constructor overloading?
+71. What is constructor chaining?
+72. What does `this()` do?
+73. What does `super()` do?
+74. When is a default constructor generated?
+75. What is initialization order?
+76. What is class initialization?
+77. What is an instance initializer?
+78. What does `static` mean for initialization?
+79. What does `private` mean?
+80. What is package-private access?
+81. What is special about `protected`?
+82. Can a private method be overridden?
+83. Can a final method be overridden?
+84. Can a final class be extended?
+85. What does `import` do?
+86. Does wildcard import include subpackages?
+87. What is static import?
+88. Why is String immutable?
+89. What is the String pool?
+90. What does `intern()` do?
+91. `trim()` vs `strip()`?
+92. `replace()` vs `replaceAll()`?
+93. Why can `String.length()` differ from Unicode code-point count?
+94. What is a text block?
+95. What is boxing?
+96. What is unboxing?
+97. Why does unboxing null throw NPE?
+98. Why should wrapper identity not be compared with `==`?
+99. Why must `equals` and `hashCode` agree?
+100. What makes Java code maintainable?
+
+---
+
+# Final Interview Rule
+
+For every tricky Java question, answer in this order:
+
+```text
+1. State the result.
+2. State whether it is compile-time or runtime.
+3. Name the governing Java rule.
+4. Show the smallest example.
+5. Mention the version caveat if the feature changed across releases.
+6. Mention the common trap.
+```
+
+Example:
+
+> **Question:** Can two methods differ only by return type?
+>
+> **Answer:** No. That is a compile-time error because return type alone does not distinguish overloaded methods. The parameter list/signature must differ. `throws`, parameter variable names, and `final` on a parameter do not create a distinct overload. This is a compile-time language rule, not a runtime dispatch rule.
+
+This method is more reliable than memorizing isolated “yes/no” interview answers.
