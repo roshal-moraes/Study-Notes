@@ -768,3 +768,5 @@ The same techniques apply. A bare "describe this image" gives shallow output for
 
 **Gaps in the source:** the pasted text for the "URL reference" and "Files API" image-sending tabs, and the Raw Messages API vs. Agent SDK tab details beyond the raw loop, were truncated or absent. The notes above reflect only what was provided; verify those parts in the original course or the docs.
 
+
+
